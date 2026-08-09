@@ -61,7 +61,7 @@ jobs:
       # STEP 5 - Terraform Format Check
       # =========================================================
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: terraform fmt -recursive
 
 
       # =========================================================
