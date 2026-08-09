@@ -4,7 +4,7 @@ stgs = {
     resource_group_name      = "rg-dev-07"
     location                 = "central india"
     account_tier             = "Standard"
-    account_replication_type = "LRS"
+    # account_replication_type = "ZRS"
 
   }
 }
