@@ -1,0 +1,85 @@
+name: Terraform Feature Branch - Plan
+
+on:
+  push:
+    branches:
+      - "feature/**"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: azurerm_storage_account
+
+    steps:
+
+      # =========================================================
+      # STEP 1 - Checkout Repository
+      # =========================================================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+      # =========================================================
+      # STEP 2 - Setup Terraform
+      # =========================================================
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+
+
+      # =========================================================
+      # STEP 3 - Azure Login Using Service Principal
+      # =========================================================
+      - name: Azure Login
+        run: |
+          az login \
+            --service-principal \
+            --username "${{ secrets.AZURE_CLIENT_ID }}" \
+            --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZURE_TENANT_ID }}"
+
+          az account set \
+            --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+
+      # =========================================================
+      # STEP 4 - Verify Azure Subscription
+      # =========================================================
+      - name: Verify Azure Login
+        run: az account show --output table
+
+
+      # =========================================================
+      # STEP 5 - Terraform Format Check
+      # =========================================================
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+
+      # =========================================================
+      # STEP 6 - Terraform Init
+      # =========================================================
+      - name: Terraform Init
+        run: terraform init -input=false
+
+
+      # =========================================================
+      # STEP 7 - Terraform Validate
+      # =========================================================
+      - name: Terraform Validate
+        run: terraform validate
+
+
+      # =========================================================
+      # STEP 8 - Terraform Plan
+      # =========================================================
+      - name: Terraform Plan
+        run: terraform plan -input=false -no-color
