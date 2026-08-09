@@ -1,20 +1,25 @@
-name: Terraform Feature Branch - Security Scan and Plan
+name: Terraform Feature Branch - Security Scan, Plan and Apply
 
 on:
   push:
     branches:
       - "feature/**"
+      - "main"
 
 permissions:
   contents: read
 
-# =========================================================
-# STAGE 1 - SECURITY SCAN
-# =========================================================
 jobs:
+
+  # =========================================================
+  # STAGE 1 - SECURITY SCAN
+  # Only Feature Branch
+  # =========================================================
   security-scan:
     name: Stage 1 - Security Scan
     runs-on: ubuntu-latest
+
+    if: startsWith(github.ref, 'refs/heads/feature/')
 
     defaults:
       run:
@@ -22,39 +27,27 @@ jobs:
 
     steps:
 
-      # =========================================================
-      # STEP 1 - Checkout Repository
-      # =========================================================
       - name: Checkout Repository
         uses: actions/checkout@v4
 
 
-      # =========================================================
-      # STEP 2 - Setup Terraform
-      # =========================================================
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: latest
 
 
-      # =========================================================
-      # STEP 3 - Terraform Format Check
-      # =========================================================
       - name: Terraform Format Check
         run: terraform fmt -recursive
 
 
       # =========================================================
-      # STEP 4 - Setup TFLint
+      # TFLint
       # =========================================================
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v5
 
 
-      # =========================================================
-      # STEP 5 - Run TFLint
-      # =========================================================
       - name: Run TFLint
         run: |
           tflint --init
@@ -62,7 +55,7 @@ jobs:
 
 
       # =========================================================
-      # STEP 6 - Run tfsec
+      # tfsec
       # =========================================================
       - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
@@ -71,7 +64,7 @@ jobs:
 
 
       # =========================================================
-      # STEP 7 - Run Checkov
+      # Checkov
       # =========================================================
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@v12
@@ -81,17 +74,14 @@ jobs:
 
 
       # =========================================================
-      # STEP 8 - Setup Infracost
+      # Infracost
       # =========================================================
       - name: Setup Infracost
         uses: infracost/actions/setup@v3
         with:
-          api-key: ${{ secrets.INFRACOST_API_KEY }}      # done
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
 
 
-      # =========================================================
-      # STEP 9 - Run Infracost
-      # =========================================================
       - name: Run Infracost
         run: |
           infracost breakdown \
@@ -99,14 +89,85 @@ jobs:
             --format=table
 
 
+
   # =========================================================
   # STAGE 2 - TERRAFORM PLAN
+  # Only Feature Branch
   # =========================================================
   terraform-plan:
     name: Stage 2 - Terraform Plan
     runs-on: ubuntu-latest
 
     needs: security-scan
+
+    if: startsWith(github.ref, 'refs/heads/feature/')
+
+    defaults:
+      run:
+        working-directory: ./azurerm_storage_account
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+
+
+      # =========================================================
+      # Azure Login
+      # =========================================================
+      - name: Azure Login Using Service Principal
+        run: |
+          az login \
+            --service-principal \
+            --username "${{ secrets.AZURE_CLIENT_ID }}" \
+            --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZURE_TENANT_ID }}"
+
+          az account set \
+            --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+
+      - name: Verify Azure Login
+        run: az account show --output table
+
+
+      # =========================================================
+      # Terraform Init
+      # =========================================================
+      - name: Terraform Init
+        run: terraform init -input=false
+
+
+      # =========================================================
+      # Terraform Validate
+      # =========================================================
+      - name: Terraform Validate
+        run: terraform validate
+
+
+      # =========================================================
+      # Terraform Plan
+      # =========================================================
+      - name: Terraform Plan
+        run: terraform plan -input=false -no-color
+
+
+
+  # =========================================================
+  # STAGE 3 - TERRAFORM PLAN & APPLY
+  # Only Main Branch
+  # =========================================================
+  terraform-apply:
+    name: Stage 3 - Terraform Plan and Apply
+    runs-on: ubuntu-latest
+
+    if: github.ref == 'refs/heads/main'
 
     defaults:
       run:
@@ -131,7 +192,7 @@ jobs:
 
 
       # =========================================================
-      # STEP 3 - Azure Login Using Service Principal
+      # STEP 3 - Azure Login
       # =========================================================
       - name: Azure Login Using Service Principal
         run: |
@@ -146,7 +207,7 @@ jobs:
 
 
       # =========================================================
-      # STEP 4 - Verify Azure Subscription
+      # STEP 4 - Verify Azure Login
       # =========================================================
       - name: Verify Azure Login
         run: az account show --output table
@@ -168,6 +229,15 @@ jobs:
 
       # =========================================================
       # STEP 7 - Terraform Plan
+      # Save Plan File
       # =========================================================
       - name: Terraform Plan
-        run: terraform plan -input=false -no-color
+        run: terraform plan -input=false -out=tfplan
+
+
+      # =========================================================
+      # STEP 8 - Terraform Apply
+      # Apply Exactly Same Plan
+      # =========================================================
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
