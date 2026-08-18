@@ -19,4 +19,11 @@ subnets = {
         virtual_network_name = "vnet-dev-07"
         address_prefixes = ["10.0.3.0/26"]
     }
+
+    sbnet4 = {
+        name =  "AjeetSubnet"
+        resource_group_name = "rg-dev-07"
+        virtual_network_name = "vnet-dev-07"
+        address_prefixes = ["10.0.4.0/26"]
+    }
 }
